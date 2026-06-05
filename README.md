@@ -1,36 +1,34 @@
 # Contribution #1: Adapter: Groq Model Provider
 
-**Contribution Number:** 1  
-**Student:** Harshavardan Yuvaraj
-**Issue:** [https://github.com/orthogonalhq/nous-core/issues/309](https://github.com/orthogonalhq/nous-core/issues/309)  
-**Status:** Phase I Complete
-
----
+* **Contribution Number:** 1
+* **Student:** Harshavardan Yuvaraj
+* **Issue:** https://github.com/orthogonalhq/nous-core/issues/309
+* **Status:** Phase I Complete
 
 ## Why I Chose This Issue
 
-The nous-core framework focuses on AI agent core architectures, making the implementation of an external provider class a likely "good" signal engineering task. Developing an orchestration adapter requires careful consideration of latency, data schema mapping, and runtime error isolation—skills directly applicable to competitive SWE engineering roles. Moreover, the task heavily utilizes my existing technical stack in TypeScript and architectural design patterns. Building an adapter that safely interfaces with a endpoint using an OpenAI-compatible specification is a good first issue to take on.  
----
+I chose this issue because adding a model provider adapter is a practical, well-defined backend task. The `nous-core` project integrates with different LLM providers, and adding support for Groq expands the choice of available inference options for users. 
+
+This task matches my interest in backend integrations and type systems. The implementation requires setting up the adapter class, linking it to the framework's model provider registry, mapping configuration schemas, and ensuring both standard text generation and streaming token payloads are handled correctly. It allows me to contribute a clear, functional utility to the codebase, helping me ease into open-source contributions as this will be my very first.
 
 ## Understanding the Issue
 
 ### Problem Description
 
-[In your own words, what's broken or missing?]
+The `nous-core` framework manages model coordination through its Subcortex cognitive layer, which routes tasks to various LLM provider adapters. Currently, there is no native adapter for the Groq API within this layer. As a result, users cannot configure their self-hosted personal assistant to utilize Groq's low-latency inference endpoints for running open-weight models.
 
 ### Expected Behavior
 
-[What should happen?]
+A user should be able to select `groq` as their model provider in the application configuration. The Subcortex layer should instantiate a Groq provider adapter that reads the necessary credentials (via environment variables or autonomic configuration), maps the requested open-weight models (like Llama 3 or Mixtral), and handles both standard generation and Server-Sent Events (SSE) token streaming. All incoming configurations and payloads must pass strict Zod runtime schema validations.
 
 ### Current Behavior
 
-[What actually happens?]
+The framework lacks a Groq adapter. Because the core provider types and Zod validation schemas do not recognize `groq`, passing it as a provider option causes runtime configuration validation to fail, blocking agent initialization.
 
 ### Affected Components
 
-[Which parts of the codebase are involved?]
-
----
+* **Providers Module:** A new adapter file needs to be added to host the new Groq provider class logic, manage configuration options, and handle the API request shapes.
+* **Types / Configuration Schemas:** The TypeScript definitions or configuration schemas that restrict allowed provider names and model strings need to be updated to recognize `groq` and its respective models.
 
 ## Reproduction Process
 
