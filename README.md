@@ -1,16 +1,15 @@
-# Contribution [#]: [Issue Title]
+# Contribution #1: Adapter: Groq Model Provider
 
-**Contribution Number:** [1 / 2 / 3]  
-**Student:** [Your Name]  
-**Issue:** [GitHub issue link]  
-**Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Contribution Number:** 1  
+**Student:** Harshavardan Yuvaraj
+**Issue:** [https://github.com/orthogonalhq/nous-core/issues/309](https://github.com/orthogonalhq/nous-core/issues/309)  
+**Status:** Phase I Complete
 
 ---
 
 ## Why I Chose This Issue
 
-[1-2 paragraphs explaining why this issue interests you, how it matches your skills/learning goals, what you hope to learn]
-
+The nous-core framework focuses on AI agent core architectures, making the implementation of an external provider class a likely "good" signal engineering task. Developing an orchestration adapter requires careful consideration of latency, data schema mapping, and runtime error isolation—skills directly applicable to competitive SWE engineering roles. Moreover, the task heavily utilizes my existing technical stack in TypeScript and architectural design patterns. Building an adapter that safely interfaces with a endpoint using an OpenAI-compatible specification is a good first issue to take on.  
 ---
 
 ## Understanding the Issue
