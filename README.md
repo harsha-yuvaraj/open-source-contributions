@@ -4,7 +4,7 @@
 * **Student:** Harshavardan Yuvaraj
 * **Issue:** https://github.com/orthogonalhq/nous-core/issues/309
 * **Type:** Feature contribution (adding a new capability), not a bug fix
-* **Status:** Phase II Complete
+* **Status:** Phase III — implementation complete, PR open (#404)
 
 ## Why I Chose This Issue
 
@@ -127,44 +127,43 @@ Using the UMPIRE framework (adapted for a feature):
 ## Testing Strategy
 
 ### Unit Tests
-- [ ] Groq definition is present and schema-valid after catalog aggregation.
-- [ ] `providerFactory.create(...)` returns a `ChatCompletionsProvider` configured with Groq's endpoint.
-- [ ] API key is resolved from `GROQ_API_KEY` (and absence raises the expected auth error).
+- [x] Groq definition is present and schema-valid after catalog aggregation.
+- [x] `providerFactory.create(...)` returns a `ChatCompletionsProvider` configured with Groq's endpoint.
+- [x] API key is resolved from `GROQ_API_KEY` (and absence raises the expected auth error).
 
 ### Integration Tests
-- [ ] Adapter resolution maps the `groq` vendor to the `chat-completions` adapter (via `adapter-resolver`).
-- [ ] `provider-codegen` / `check:generated` passes with the new leaf (catalogs in sync).
+- [x] Adapter resolution maps the `groq` vendor to the `chat-completions` adapter (via `adapter-resolver`).
+- [x] `provider-codegen` / `check:generated` passes with the new leaf (catalogs in sync).
 
-### Manual Testing
-- [ ] With a real `GROQ_API_KEY` set, run an `invoke` and a `stream` against Groq's endpoint and confirm a valid completion and token stream. *(Optional — requires a Groq API key.)*
 
 ---
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Progress
 
-[What you built this week, challenges faced, decisions made]
+Implemented Groq as a certified provider leaf at `self/subcortex/providers/src/providers/groq/`. Since Groq's API is OpenAI Chat Completions-compatible, the leaf only supplies Groq-specific metadata (endpoint, `GROQ_API_KEY`, default model) and reuses the shared `ChatCompletionsProvider` — no custom adapter or `implementation.ts`.
+
+Mid-task, the maintainer landed a refactor on the integration branch, so I synced my branch onto it before coding. That patch resolved two of my open questions: provider IDs are now derived from `vendorKey` (so I omit `wellKnownProviderId`), and the unknown-vendor warning is suppressed for generated factories. I also confirmed via #390 that `nativeToolUse` should not be advertised until the shared tool-use bridge exists.
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:** 13 — the 4-file `groq/` leaf, a dedicated `groq.test.ts`, the 3 regenerated catalogs, and 5 existing roster tests extended to include `groq`.
+- **Key commit:** `feat(subcortex-providers): add Groq model provider leaf` (`902e266e`)
+- **Approach decisions:** reuse the shared protocol instead of a custom adapter; default to `llama-3.3-70b-versatile` (stable production model, with `/v1/models` discovery for the rest); flagged a duplicate `chat-completions` adapter module to the maintainer for a possible generator-level dedupe.
 
 ---
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** https://github.com/orthogonalhq/nous-core/pull/404
 
-**PR Description:** [Draft or final PR description — much of the content above can be adapted]
+**PR Description:** Adds the Groq certified provider leaf reusing the shared `ChatCompletionsProvider`. Regenerated catalogs, added tests. Targets the `feat/contributor-friendly-inference-provider-surface` integration branch (per maintainer guidance).
 
 **Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
+- Awaiting review.
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting review
 
 ---
 
