@@ -3,46 +3,40 @@
 * **Contribution Number:** 1
 * **Student:** Harshavardan Yuvaraj
 * **Issue:** https://github.com/orthogonalhq/nous-core/issues/309
-* **Type:** Feature contribution (adding a new capability), not a bug fix
-* **Status:** Phase III — implementation complete, PR open (#404)
+* **Type:** Feature contribution (adding a new capability)
+* **Status:** ✅ Merged — PR #404 accepted into the integration branch
 
 ## Why I Chose This Issue
 
-I chose this issue because adding a model provider adapter is a practical, well-defined backend task. The `nous-core` project integrates with different LLM providers, and adding support for Groq expands the choice of available inference options for users.
-
-This task matches my interest in backend integrations and type systems. The implementation requires registering Groq with the framework's definition-driven provider system, mapping configuration metadata (endpoint, credentials, default model), and ensuring both standard text generation and streaming token payloads are handled correctly. It lets me contribute a clear, functional utility to the codebase and ease into open-source contributions — this is my very first.
-
-> **Note on framing:** This is a *feature* contribution. There is no pre-existing bug to reproduce; instead, "reproduction" below means **demonstrating the capability gap**, showing that Groq is not currently a selectable provider, which becomes the baseline I verify my feature against.
+Adding a model provider adapter was a practical, well-scoped backend task that matched my interest in backend integrations and type systems. It required registering Groq with the framework's definition-driven provider system, mapping configuration metadata (endpoint, credentials, default model), and ensuring streaming worked correctly — a clear, functional utility contribution. This was also my very first open-source contribution.
 
 ## Understanding the Issue
 
 ### Problem Description
 
-The `nous-core` framework manages model coordination through its Subcortex cognitive layer, which routes tasks to LLM provider adapters. There is currently no Groq provider registered in this layer, so users cannot configure their self-hosted assistant to use Groq's low-latency inference endpoints.
+`nous-core` routes tasks through registered LLM provider adapters. No Groq provider was registered, so users couldn't select Groq as an inference backend.
 
 ### Expected Behavior
 
-A user should be able to select `groq` as their model provider. The Subcortex runtime should resolve a Groq provider definition, read the API key from its configured environment variable, point requests at Groq's endpoint, and handle both standard generation and Server-Sent Events (SSE) token streaming. All inputs continue to pass the existing `TextModelInputSchema` Zod validation.
+A user should be able to select `groq` as their provider. The Subcortex runtime should resolve its definition, read the API key from `GROQ_API_KEY`, point requests at Groq's endpoint, and handle both standard generation and SSE streaming.
 
-### Current Behavior
+### Current Behavior (at time of contribution)
 
-No Groq provider definition exists. The generated provider catalog only contains `anthropic`, `openai`, and `ollama`. Because the runtime resolves a provider by matching its `vendorKey` against the registered definitions, a `groq` config matches nothing: no endpoint or credential is resolved, and adapter resolution falls back to the plain-text adapter — so Groq is effectively unusable.
+No Groq leaf existed. The generated provider catalog only contained `anthropic`, `openai`, and `ollama`. With no matching definition, a `groq` config resolved to nothing and fell back to the plain-text adapter.
 
-> **Correction vs. the original issue text:** The issue body (written before a large provider-surface refactor) said passing `groq` would "fail Zod validation" and implied a brand-new adapter class plus type-schema edits. That is no longer accurate. The vendor type is now an open union (`KnownProviderVendor | (string & {})`), so `'groq'` is type-valid; the real gap is simply that **no Groq definition leaf is registered**. The maintainer explicitly asked contributors to flag stale/contradictory guidance, which I have done on the issue thread.
+> The original issue text (written before a large provider-surface refactor) said `'groq'` would "fail Zod validation" and implied a new adapter class and type-schema edits. The vendor type was actually an open union by the time I worked on it — the real gap was simply a missing definition leaf. I flagged this on the issue thread as the maintainer had asked contributors to surface stale guidance.
 
 ### Affected Components
 
-* **Providers package (`self/subcortex/providers/`):** a new certified provider *leaf* (`src/providers/groq/`) supplying Groq's metadata and a factory.
-* **Generated catalogs:** `provider-definitions.ts`, `provider-adapters.ts`, `provider-factories.ts` are regenerated by script (never hand-edited) so the runtime discovers Groq.
-* **(Possibly) `self/shared/src/types/provider.ts`:** the hand-maintained `KNOWN_PROVIDER_VENDORS` list — pending a maintainer decision (see Solution Approach → Review).
+* **`self/subcortex/providers/src/providers/groq/`** — new certified provider leaf.
+* **Generated catalogs** (`provider-definitions.ts`, `provider-adapters.ts`, `provider-factories.ts`) — regenerated by script after adding the leaf.
+* **`self/shared/src/types/provider.ts`** — initially suspected to need editing (`KNOWN_PROVIDER_VENDORS`); resolved during implementation by the maintainer's mid-task patch, so no edit was needed.
 
 ## Reproduction Process
 
-> Reframed for a feature: these steps demonstrate that the Groq capability is **absent today**, establishing the baseline my contribution must change.
-
 ### Environment Setup
 
-Prerequisites: Node.js 22+, pnpm 10+ (`corepack enable && corepack prepare pnpm@latest --activate`).
+Prerequisites: Node.js 22+, pnpm 10+.
 
 ```bash
 git clone https://github.com/harsha-yuvaraj/nous-core.git
@@ -51,76 +45,44 @@ pnpm install
 pnpm build
 ```
 
-Setup notes / challenges (Windows 11):
-* **`pnpm` not recognized / corepack `EPERM` (the one I actually hit):** Node 24 was installed but `pnpm` wasn't on my PATH. Running `corepack prepare pnpm@10.6.2 --activate` failed with `EPERM: operation not permitted, open 'C:\Program Files\nodejs\pnpm'` because corepack writes its shim into the Node install folder, which needs Administrator rights. **Fix:** I opened **PowerShell as Administrator** and ran `corepack enable` then `corepack prepare pnpm@10.6.2 --activate`; reopening a normal terminal, `pnpm -v` correctly printed `10.6.2` (the version pinned in `package.json`). *(Non-admin alternative: the standalone installer at `https://get.pnpm.io/install.ps1`.)*
-* **`better-sqlite3` native build:** this compiles native C++ during install and can require the Visual Studio C++ build tools — in my case it compiled cleanly (~51s), so the tools were already present.
-* **Electron binary:** pnpm v10's build-script allowlisting can skip Electron's postinstall (the documented workaround is `node node_modules/electron/install.js`) — in my case the postinstall ran fine and no workaround was needed.
-* **Ignored build script `electron-winstaller`:** pnpm prints a warning that this build script was skipped. It only builds the Windows *installer* for distributing the desktop app, so it's irrelevant to dev/build/test and safe to leave un-approved.
-* **Private submodules** (`.architecture/`, `.worklog/`, `.skills/`, `.opencode/`) return 404 on a public clone — this is expected and the repo builds without them.
+**Windows 11 setup notes:**
+* **`pnpm` not on PATH / corepack `EPERM`:** `corepack prepare pnpm@10.6.2 --activate` failed because corepack writes to `C:\Program Files\nodejs\`, which requires admin rights. Fix: ran the command in PowerShell as Administrator. After that, `pnpm -v` printed `10.6.2`.
+* `better-sqlite3` compiled native C++ cleanly (~51s); Visual Studio C++ build tools were already installed.
+* Private submodules (`.architecture/`, `.worklog/`, etc.) return 404 on a public clone — expected, the repo builds without them.
 
-Result: `pnpm install` completed successfully (1504 packages, ~2 minutes) with pnpm 10.6.2.
+### Demonstrating the Gap
 
-### Steps to Reproduce (demonstrate the gap)
+```bash
+cd self/subcortex/providers
+node scripts/generate-provider-aggregates.mjs --list
+# output: anthropic, ollama, openai  (no groq)
+```
 
-1. From the repo root, list the provider leaves the framework currently registers:
-   ```bash
-   cd self/subcortex/providers
-   node scripts/generate-provider-aggregates.mjs --list
-   ```
-2. Observe the output — only three providers are present:
-   ```
-   anthropic
-   ollama
-   openai
-   ```
-3. Confirm there is **no** `groq` directory under `self/subcortex/providers/src/providers/`, and no `groq` entry in the generated `src/provider-definitions.ts`.
-4. **Result:** Groq cannot be selected as a provider; any `groq` config resolves to no definition and falls back to the text adapter. This is the baseline my feature changes.
+No `groq/` directory existed under `src/providers/`, and no `groq` entry appeared in the generated catalog. This was the baseline the contribution changed.
 
-### Reproduction Evidence
-
-* **Command output:** `generate-provider-aggregates.mjs --list` → `anthropic`, `ollama`, `openai` (no `groq`).
-* **My findings:** The provider system is **definition-driven**. `self/subcortex/providers/src/runtime/provider-runtime.ts` resolves the API key via `process.env[definition.auth.envVar]` and overrides the endpoint to `definition.defaultEndpoint`. This means adding Groq requires only a correct *definition leaf* — the shared `ChatCompletionsProvider` already handles requests, streaming, and validation. The old "work around hard-coded `OPENAI_API_KEY`" concern from the issue no longer applies.
+**Key finding:** the provider system is definition-driven. `provider-runtime.ts` resolves the API key via `process.env[definition.auth.envVar]` and overrides the endpoint to `definition.defaultEndpoint`. Adding Groq required only a correct definition leaf — the shared `ChatCompletionsProvider` already handled requests, streaming, and validation.
 
 ### Branch Link
 
 * **Working branch (fork):** https://github.com/harsha-yuvaraj/nous-core/tree/feat/groq-provider
-* **Base / PR target:** `feat/contributor-friendly-inference-provider-surface` on the upstream repo (per maintainer instruction — **not** `dev`).
+* **Base / PR target:** `feat/contributor-friendly-inference-provider-surface` on upstream (per maintainer — not `dev`).
 
 ---
 
 ## Solution Approach
 
-### Analysis
+Groq's API is OpenAI Chat Completions-compatible, so no custom adapter class was needed. The solution was a thin config entry leaf at `src/providers/groq/` supplying Groq-specific metadata and a factory wrapping the shared `ChatCompletionsProvider`.
 
-The gap exists because the runtime can only resolve providers that have a registered definition leaf, and there is no `groq` leaf. Groq's API is OpenAI Chat Completions-compatible, so it does **not** need a custom networking/adapter class — it can reuse the shared `ChatCompletionsProvider` primitive in `src/protocols/openai-api/`. The fix is therefore a small, metadata-driven "config entry."
+**Steps taken:**
+1. Created the `groq/` leaf — `definition.ts` (endpoint, auth, default model, capabilities), `provider.ts` (factory), `adapter.ts` + `index.ts` (re-export the shared chat-completions adapter).
+2. Ran `pnpm --filter @nous/subcortex-providers run generate:providers` to regenerate the catalogs.
+3. Added `groq.test.ts` and extended 5 existing roster tests to include `groq`.
+4. Ran `typecheck`, `lint`, `test`, `build` — all passed.
 
-### Proposed Solution
-
-Add a certified provider leaf at `self/subcortex/providers/src/providers/groq/` that mirrors the existing `openai/` leaf, supplying Groq-specific metadata (endpoint, `GROQ_API_KEY`, default model) and a factory that constructs `ChatCompletionsProvider`. Regenerate the provider catalogs so the runtime discovers it. No `implementation.ts` is needed.
-
-### Implementation Plan
-
-Using the UMPIRE framework (adapted for a feature):
-
-**Understand:** Nous has no Groq provider. The provider system is definition-driven, so I need to register Groq as a certified leaf so the runtime can resolve its endpoint, credentials, and adapter. Groq speaks the OpenAI `/v1/chat/completions` API.
-
-**Match:** The closest existing pattern is the `openai/` leaf (`src/providers/openai/`) — a thin wrapper around the shared `ChatCompletionsProvider` (`src/protocols/openai-api/provider.ts`). `ollama/` is another OpenAI-style example. The `anthropic/` leaf is the reference for a *native* provider (a different shape I do not need). Runtime credential/endpoint resolution lives in `src/runtime/provider-runtime.ts`; adapter resolution (by `adapterKey`) lives in `src/adapter-resolver.ts`.
-
-**Plan:**
-1. Create `src/providers/groq/`:
-   * `definition.ts` — `vendorKey: 'groq'`, `defaultEndpoint: 'https://api.groq.com/openai'` (verified against Groq's docs; the provider appends `/v1/chat/completions`), `auth.envVar: 'GROQ_API_KEY'`, `protocol`/`adapterKey: 'chat-completions'`, `capabilities: { streaming: true }`, `defaultModelId` (pending maintainer's choice).
-   * `provider.ts` — factory with `vendorKey: 'groq'` returning `new ChatCompletionsProvider(config, { apiKey })`.
-   * `adapter.ts` + `index.ts` — re-export the shared chat-completions adapter and the leaf's public surface.
-2. Regenerate catalogs: `pnpm --filter @nous/subcortex-providers run generate:providers`, then verify with `check:generated`.
-3. *(Pending maintainer answer)* optionally add `'groq'` to `KNOWN_PROVIDER_VENDORS` and update its `length === 4` test.
-4. Add tests under `src/__tests__/`.
-5. Run the focused provider suite, then the full gate (`typecheck`, `lint`, `test`, `build`).
-
-**Implement:** *(Phase III)* — work happens on branch `feat/groq-provider`; commits/PR link to be added here as I go.
-
-**Review:** Follow `CONTRIBUTING.md`: conventional commits scoped to the package (e.g. `feat(subcortex-providers): add Groq model provider`); respect the scope boundary (do **not** modify `IModelProvider` or `TextModelInputSchema`); never hand-edit generated catalogs; target the integration branch, not `dev`. I have already posted clarifying questions to the maintainer on the issue (default model id, well-known provider UUID convention, `nativeToolUse`, endpoint sanity-check, and the misleading "unknown vendor" log).
-
-**Evaluate:** Confirm Groq appears in the regenerated catalog; the factory builds a `ChatCompletionsProvider` with Groq's endpoint and the key from `GROQ_API_KEY`; streaming and non-streaming paths work (mocked `fetch`); and the full CI gate passes on Ubuntu/macOS/Windows.
+**Key decisions:**
+- Omitted `wellKnownProviderId` — derived centrally from `vendorKey` by `provider-identity.ts` (resolved by maintainer patch mid-task).
+- Omitted `nativeToolUse` from capabilities — per issue #390, providers must not advertise it until the shared tool-use bridge supports the full request/tool-call/result loop.
+- Used `llama-3.3-70b-versatile` as the default — stable production model; the larger Llama 4 Maverick was already deprecated on Groq. Model discovery via `/v1/models` lets users select any other at runtime.
 
 ---
 
@@ -129,28 +91,21 @@ Using the UMPIRE framework (adapted for a feature):
 ### Unit Tests
 - [x] Groq definition is present and schema-valid after catalog aggregation.
 - [x] `providerFactory.create(...)` returns a `ChatCompletionsProvider` configured with Groq's endpoint.
-- [x] API key is resolved from `GROQ_API_KEY` (and absence raises the expected auth error).
+- [x] API key is resolved from `GROQ_API_KEY` (absence raises the expected auth error).
 
 ### Integration Tests
-- [x] Adapter resolution maps the `groq` vendor to the `chat-completions` adapter (via `adapter-resolver`).
+- [x] Adapter resolution maps `groq` to the `chat-completions` adapter (via `adapter-resolver`).
 - [x] `provider-codegen` / `check:generated` passes with the new leaf (catalogs in sync).
-
 
 ---
 
 ## Implementation Notes
 
-### Progress
-
-Implemented Groq as a certified provider leaf at `self/subcortex/providers/src/providers/groq/`. Since Groq's API is OpenAI Chat Completions-compatible, the leaf only supplies Groq-specific metadata (endpoint, `GROQ_API_KEY`, default model) and reuses the shared `ChatCompletionsProvider` — no custom adapter or `implementation.ts`.
-
-Mid-task, the maintainer landed a refactor on the integration branch, so I synced my branch onto it before coding. That patch resolved two of my open questions: provider IDs are now derived from `vendorKey` (so I omit `wellKnownProviderId`), and the unknown-vendor warning is suppressed for generated factories. I also confirmed via #390 that `nativeToolUse` should not be advertised until the shared tool-use bridge exists.
-
 ### Code Changes
 
-- **Files modified:** 13 — the 4-file `groq/` leaf, a dedicated `groq.test.ts`, the 3 regenerated catalogs, and 5 existing roster tests extended to include `groq`.
+- **Files modified:** 13 — the 4-file `groq/` leaf, `groq.test.ts`, 3 regenerated catalogs, and 5 existing roster tests extended to include `groq`.
 - **Key commit:** `feat(subcortex-providers): add Groq model provider leaf` (`902e266e`)
-- **Approach decisions:** reuse the shared protocol instead of a custom adapter; default to `llama-3.3-70b-versatile` (stable production model, with `/v1/models` discovery for the rest); flagged a duplicate `chat-completions` adapter module to the maintainer for a possible generator-level dedupe.
+- Flagged to maintainer: `CERTIFIED_PROVIDER_ADAPTER_MODULES` now lists `chat-completions` twice (openai and groq both reuse it) — harmless but a potential generator-level dedupe. Two `adapter-resolver` test cases also used `'groq'` as a placeholder for an unknown vendor; I switched those to `'unknown-vendor'` to preserve their original intent.
 
 ---
 
@@ -158,12 +113,12 @@ Mid-task, the maintainer landed a refactor on the integration branch, so I synce
 
 **PR Link:** https://github.com/orthogonalhq/nous-core/pull/404
 
-**PR Description:** Adds the Groq certified provider leaf reusing the shared `ChatCompletionsProvider`. Regenerated catalogs, added tests. Targets the `feat/contributor-friendly-inference-provider-surface` integration branch (per maintainer guidance).
+**Maintainer Feedback (@atlamors):**
+- Reviewed via conflict precheck and a non-mutating merge simulation. Confirmed the leaf followed the certified-provider shape: Groq registered, appeared in Settings, used the Chat Completions path, declared API-key metadata, and participated in `/v1/models` model discovery.
+- The PR surfaced a real project-side ambiguity (`protocol` vs `adapterKey` vs capabilities); the maintainer was explicit this was **"not a fault in this contribution."** The duplicate-adapter-module and hardcoded-test-roster items I flagged became maintainer follow-ups.
+- Merged as an early-access provider integration.
 
-**Maintainer Feedback:**
-- Awaiting review.
-
-**Status:** Awaiting review
+**Status:** ✅ Merged into `feat/contributor-friendly-inference-provider-surface`.
 
 ---
 
@@ -171,21 +126,27 @@ Mid-task, the maintainer landed a refactor on the integration branch, so I synce
 
 ### Technical Skills Gained
 
-[What you learned technically]
+- **Definition-driven provider architecture:** how a leaf's metadata flows through generated catalogs to runtime resolution (`vendorKey` for identity/credentials, `adapterKey` for behavior), and why reusing a shared protocol is preferable to a custom adapter for an OpenAI-compatible API.
+- **TypeScript/monorepo practices:** `as const satisfies`, pnpm filtered scripts, codegen workflows, and UUIDv5 identity derived centrally from `vendorKey`.
+- **OSS Git workflow end to end:** fork vs. upstream remotes, branching off an integration branch, conventional commits, and recovering a diverged fork with `git push --force-with-lease`.
+- **Reading a moving codebase:** trusting live code/docs over a stale issue body, and using clarifying questions to de-risk before writing code.
 
 ### Challenges Overcome
 
-[What was hard and how you solved it]
+- **Stale issue + moving target:** the issue text predated a large refactor, and the integration branch was patched mid-task. I synced and re-derived the correct approach from the updated docs rather than the issue body.
+- **Tests that encode the provider roster:** several tests enumerated every provider (two even used `'groq'` as an *unknown-vendor* placeholder). Adding Groq caused failures; I updated them precisely, distinguishing required changes from accidental ones.
+- **Git divergence:** my fork's branch had drifted from local; I diagnosed the ancestry and resolved it with a targeted force-push rather than a messy merge.
 
 ### What I'd Do Differently Next Time
 
-[Reflection on your process]
+- **Push the working branch to the fork sooner** to avoid the later divergence cleanup.
+- **Front-load clarifying questions** in a single batch — they were high-value, but I could have consolidated them.
 
 ---
 
 ## Resources Used
 
-- Provider adapter docs: `docs/content/docs/development/provider-adapters/` (quickstart, leaf anatomy, generated-catalogs workflow, testing checklist).
-- Reference leaf: `self/subcortex/providers/src/providers/openai/` and the shared protocol `src/protocols/openai-api/`.
+- Provider adapter docs: `docs/content/docs/development/provider-adapters/`
+- Reference leaf: `self/subcortex/providers/src/providers/openai/` and `src/protocols/openai-api/`
 - Groq OpenAI-compatibility docs: https://console.groq.com/docs/openai
-- `CONTRIBUTING.md` (contribution tiers, commit/PR conventions).
+- `CONTRIBUTING.md` (contribution tiers, commit/PR conventions)
