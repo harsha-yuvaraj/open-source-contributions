@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Harshavardan Yuvaraj
 **Issue:** https://github.com/orthogonalhq/nous-core/issues/305
-**Status:** Phase I — Done
+**Status:** Phase II (Solution Approach) — Done. Investigation redirected the issue, now an architectural contribution via #421.
 
 ---
 
@@ -64,30 +64,39 @@ This is a missing-feature gap, not a runtime bug, so "reproducing" it means conf
 
 ### Analysis
 
-[Your analysis of the root cause - what's causing the issue?]
+The "root cause" here turned out to be a mis-scoped issue, not a code bug. Digging into Vertex's auth model against the leaf contract surfaced two hard mismatches:
+
+1. **Auth and API surface are coupled.** Vertex's OpenAI-compatible `/chat/completions` endpoint accepts *only* a short-lived OAuth2 / service-account bearer token (~1h, needs refresh). Static API keys (Express Mode) work *only* on the native `:generateContent` endpoint. There is no static-key + OpenAI-compatible combination — so the thin metadata-only leaf that worked for Groq is impossible for Vertex.
+2. **The endpoint is project/region-templated**, not a single static `defaultEndpoint`; the runtime overwrites `config.endpoint` with the leaf constant, which can't hold per-user project/region values.
+
+The deeper root cause: cloud platform providers (Vertex, Bedrock, Azure AI Foundry) are categorically different from BYOK static-key providers. They carry account/project identity, region-aware endpoints, server-side credential control, quota, and billing — which is a *managed connector* concern, not a client-side provider leaf.
 
 ### Proposed Solution
 
-[High-level description of your fix approach]
+The solution changed shape as a result of the investigation, and that pivot **is** this contribution:
+
+1. **Documented the constraint and presented options — no recommendation.** I posted the coupling finding to the maintainer (@atlamors) on #305 with a neutral 3-path table (OpenAI-compat + OAuth / native + Express key / native + OAuth) and two questions (which path; contract-vs-custom-code + a `google-auth-library` dependency), deliberately letting him choose the direction rather than steering it.
+2. **Maintainer reframed the issue.** He agreed Vertex doesn't fit the static-key leaf shape and moved it under the managed **NueOS Cloud inference relay** (issue #421), alongside Bedrock and Azure — a server-side managed connector, not a client-side leaf. He credited the analysis and invited me into the architecture work.
+3. **My read going into the session (not yet confirmed by the maintainer):** #421 appears to split into a public, leaf-shaped **client-side `nue-cloud` / `nue-ai-api` provider leaf + session/token schema** (buildable and mergeable in the open repo) versus a closed, commercial server side (control plane, regional relay, provider connectors). Based on that, the client-leaf slice looks like the piece I'm best positioned to own — but which piece is actually mine gets decided in the design session, not before it.
+4. **Confirmed next step:** the maintainer is assigning us both to #421 and running a collaborative design session to "design backward from the goal line" and settle the provider-leaf patterns and schemas. My goal for that session is to come out with a concrete, mergeable first slice I can implement (ideally the client leaf), then build it in small PRs.
 
 ### Implementation Plan
 
-Using UMPIRE framework (adapted):
+**Understand:** Vertex can't be a static-key provider leaf (auth/API-surface coupling + templated endpoint). It belongs in the managed-inference-relay architecture (#421); the client-facing `nue-cloud` leaf + its schema *appears* to be the public, mergeable piece I could own — to be confirmed in the design session.
 
-**Understand:** [Restate the problem]
+**Match:** Client-leaf shape follows the existing OpenAI-compatible protocol-wrapper pattern (`protocols/openai-api/` + thin leaves like `groq/`, `ollama/`); for anything needing custom construction/auth logic, `providers/anthropic/` (with its `implementation.ts`) is the reference. The generated-catalog + roster-test workflow is the same one I used for the merged Groq leaf.
 
-**Match:** [What similar patterns/solutions exist in the codebase?]
+**Plan:** 
+1. Co-define the client-facing session/token protocol + leaf schema with the maintainer.
+2. Implement the `nue-cloud` client provider leaf against that contract (stub/mock the relay initially so it's testable without the closed backend).
+3. Regenerate the provider catalogs and add the leaf to the roster tests.
+4. Land it as incremental PRs rather than one large change.
 
-**Plan:** [Step-by-step implementation plan]
-1. [Modify file X to do Y]
-2. [Add function Z]
-3. [Update tests]
+**Implement:** Pending the design session; branch to be defined once the client-leaf slice is scoped (working branch `feat/google-vertex-ai-model-provider` may be repurposed/renamed).
 
-**Implement:** [Link to your branch/commits as you work]
+**Review:** Conventional commits scoped to the package; `pnpm typecheck && pnpm lint && pnpm test && pnpm build` green; `check:generated` in sync; leaf files match the certified-leaf anatomy.
 
-**Review:** [Self-review checklist - does it follow the project's contribution guidelines?]
-
-**Evaluate:** [How will you verify it works?]
+**Evaluate:** The leaf resolves through `resolveProviderFactory` / `createProvider`, the roster/definition tests pass, and a configured `nue-cloud` entry can round-trip a request against the stubbed relay.
 
 ---
 
@@ -112,19 +121,20 @@ Using UMPIRE framework (adapted):
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Week Progress (Solution Approach)
 
-[What you built this week, challenges faced, decisions made]
-
-### Week [Y] Progress
-
-[Continue documenting as you work]
+- Researched Vertex's auth against the leaf contract (runtime code, not just definitions) and found the auth/API-surface coupling that makes a Groq-style thin leaf impossible.
+- Posted the finding to the maintainer as neutral options (3-path table + 2 questions), no recommendation — let him choose the direction.
+- Maintainer agreed the issue was mis-scoped and reframed Vertex under the managed-inference-relay architecture (#421); credited the analysis and invited me into it.
+- Analyzed #421 + the relay design doc; my read is that it splits into a public, leaf-shaped client piece (`nue-cloud` leaf + schema) versus a closed server side — which piece is mine is still to be decided in the session, not settled.
+- Accepted involvement, being assigned to #421; a design session is pending to define the client-facing protocol and carve out a first implementable slice.
+- **Key decision:** rather than force Vertex into the current leaf model (which would have shipped something silently wrong), the contribution pivoted to shaping the correct architecture and taking the one slice I can actually build and merge. Kept a parallel track of separate leaf issues as the reliable near-term PR deliverable.
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:** None yet — this phase is investigation + design (no implementation until the design session defines the client-leaf contract).
+- **Key commits:** N/A
+- **Approach decisions:** See "Key decision" above and Solution Approach.
 
 ---
 
