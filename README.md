@@ -7,6 +7,6 @@ Tracking my open-source software contributions. Each contribution gets its own w
 | # | Title | Issue | Status | PR |
 |---|-------|-------|--------|-----|
 | 1 | [Adapter: Groq Model Provider](contribution-01-groq-model-provider.md) | [orthogonalhq/nous-core#309](https://github.com/orthogonalhq/nous-core/issues/309) | ✅ Merged | [#404](https://github.com/orthogonalhq/nous-core/pull/404) |
-| 2 | [Adapter: Google Vertex AI Model Provider](contribution-02-google-vertex-ai-model-provider.md) | [orthogonalhq/nous-core#305](https://github.com/orthogonalhq/nous-core/issues/305) | 🔄 Phase I (Done) | — |
+| 2 | [Adapter: Google Vertex AI Model Provider](contribution-02-google-vertex-ai-model-provider.md) | [orthogonalhq/nous-core#305](https://github.com/orthogonalhq/nous-core/issues/305) | 🔄 Phase II (Done) | — |
 
 
