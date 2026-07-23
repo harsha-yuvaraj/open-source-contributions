@@ -3,13 +3,13 @@
 **Contribution Number:** 3
 **Student:** Harshavardan Yuvaraj
 **Issue:** https://github.com/cortexproject/cortex/issues/7593
-**Status:** Phase I Complete
+**Status:** Phase IV — In Progress (PR [#7718](https://github.com/cortexproject/cortex/pull/7718) open, awaiting maintainer review)
 
 ---
 
 ## Why I Chose This Issue
 
-I wanted a feature contribution in Go that touches a real, production system. This issue asks to add Oracle Cloud (OCI) as an object-storage backend for Cortex, which is a well-scoped, self-contained addition: it follows an existing, repeatable pattern (each backend is a small config + client wrapper registered in a central switch), so I can learn the codebase's storage abstraction deeply without the risk of touching core query or ingestion paths.
+I wanted a feature contribution in Go that touches a real, production observability system rather than a trivial doc fix. This issue asks to add Oracle Cloud (OCI) as an object-storage backend for Cortex, which is a well-scoped, self-contained addition: it follows an existing, repeatable pattern (each backend is a small config + client wrapper registered in a central switch), so I can learn the codebase's storage abstraction deeply without the risk of touching core query or ingestion paths.
 
 It also matches what I want to learn: how a large project cleanly abstracts multiple cloud providers behind one interface, how Cortex vendors and wraps the Thanos `objstore` library, and how configuration/flags/validation propagate across components (blocks, ruler, alertmanager). Because the upstream `objstore` library already ships an OCI provider, the work is about integration and following conventions correctly — a realistic taste of contributing a "supported backend" to an open-source infra project.
 
@@ -41,11 +41,11 @@ A user should be able to select `oci` as a storage backend — e.g. `-blocks-sto
 
 ## Reproduction Process
 
-> Note: This is a feature request, not a bug, so there is no failing behavior to reproduce. Instead I verified the gap — confirming OCI is genuinely unsupported and that the integration points are as expected — through code inspection.
+> Note: This is a feature request, not a defect, so there is no failing behavior to reproduce. Instead I verified the gap — confirming OCI is genuinely unsupported and that the integration points are as expected — through code inspection.
 
 ### Environment Setup
 
-Work is on a Windows 11 machine with the Cortex repo cloned locally. Verification of the gap was done by reading the source directly; the build/vendor/test steps will be run in an environment with the Go toolchain.
+Work is on a Windows 11 machine with the Cortex repo cloned locally. A key constraint: **Go is not installed/available on the PATH in this environment**, so I could not run `go build`, `go test`, or `go mod vendor` locally. Verification of the gap was therefore done by reading the source directly; the build/vendor/test steps will be run in an environment with the Go toolchain (or via CI on the PR) before submission.
 
 ### Steps to Verify the Gap
 
@@ -65,30 +65,32 @@ Work is on a Windows 11 machine with the Cortex repo cloned locally. Verificatio
 
 ### Analysis
 
-[Your analysis of the root cause - what's causing the issue?]
+OCI storage backend was needed to be implemented. Cortex's backend abstraction requires each provider to (a) live as a config + client-wrapper package under `pkg/storage/bucket/`, and (b) be registered in `pkg/storage/bucket/client.go` (constant, `SupportedBackends`, config field, `NewClient` case). OCI had neither, even though Thanos `objstore` already ships the provider.
 
 ### Proposed Solution
 
-[High-level description of your fix approach]
+Add an `oci` package (config + a thin client wrapper over `objstore/providers/oci`) and register it in the bucket client, mirroring the existing `swift` backend. Vendor the OCI SDK, then regenerate docs and add the CHANGELOG + experimental-features entries. Because ruler/alertmanager/blocks all validate against `bucket.SupportedBackends`, one registration enables OCI across all three.
 
 ### Implementation Plan
 
 Using UMPIRE framework (adapted):
 
-**Understand:** [Restate the problem]
+**Understand:** Add OCI as a selectable object-storage backend for blocks, ruler, and alertmanager, reusing objstore's existing OCI provider rather than writing a driver from scratch.
 
-**Match:** [What similar patterns/solutions exist in the codebase?]
+**Match:** The `swift` backend is the closest template — a small `config.go` (struct + flags) plus `bucket_client.go` (thin wrapper), registered centrally. Downstream components inherit the backend automatically via `bucket.SupportedBackends`.
 
-**Plan:** [Step-by-step implementation plan]
-1. [Modify file X to do Y]
-2. [Add function Z]
-3. [Update tests]
+**Plan:**
+1. `pkg/storage/bucket/oci/config.go` — `Config` + `RegisterFlagsWithPrefix` (`oci.*` flags; yaml tags mirror the objstore provider).
+2. `pkg/storage/bucket/oci/bucket_client.go` — `NewBucketClient` wrapping `objstore/providers/oci` (build config from `oci.DefaultConfig`, marshal to YAML, call `oci.NewBucket`).
+3. `pkg/storage/bucket/client.go` — add `OCI` constant, `SupportedBackends` entry, config field, flag registration, and `NewClient` case.
+4. Vendor `github.com/oracle/oci-go-sdk/v65` (`go mod tidy && go mod vendor`).
+5. Unit tests, `make doc` (config reference + JSON schema), CHANGELOG `[FEATURE]`, `docs/configuration/v1-guarantees.md`.
 
-**Implement:** [Link to your branch/commits as you work]
+**Implement:** Branch `feature/oci-storage-backend`, 5 DCO-signed commits — `f2dd592` (config + flags), `4e41eea` (client + vendor SDK), `d2eb34b` (retries by default), `4f99295` (register backend), `0ba9121` (docs + CHANGELOG).
 
-**Review:** [Self-review checklist - does it follow the project's contribution guidelines?]
+**Review:** Follows the `swift` pattern; `gofmt`/`go vet` clean; imports grouped per repo convention; commits DCO-signed; AI assistance disclosed in the PR per the GenAI policy.
 
-**Evaluate:** [How will you verify it works?]
+**Evaluate:** `go build ./pkg/storage/...` and `go test ./pkg/storage/bucket/...` pass; regenerated docs show OCI under all three storage components with correct flags/defaults; full build, lint, and `check-doc` run on CI (Linux).
 
 ---
 
@@ -96,50 +98,57 @@ Using UMPIRE framework (adapted):
 
 ### Unit Tests
 
-- [ ] Test case 1: [Description]
-- [ ] Test case 2: [Description]
-- [ ] Test case 3: [Description]
+In `pkg/storage/bucket/oci/config_test.go` (mirrors `azure`/`s3`):
+- [x] Default config: empty YAML yields the registered flag defaults (`provider: default`, `max_request_retries: 3`, `request_retry_interval: 10`).
+- [x] Custom config: a full YAML (raw provider + all fields, including secrets) round-trips into `Config`.
+- [x] Invalid type: a bad scalar produces a `yaml.TypeError`.
 
 ### Integration Tests
 
-- [ ] Integration scenario 1
-- [ ] Integration scenario 2
+- None added. Exercising the client requires live OCI credentials, so the wrapper is intentionally not instantiated in unit tests (it would read real credentials/instance metadata). Existing `client_test.go` covers `NewClient` dispatch (S3/GCS/unknown); OCI registration is covered by the build and its presence in `SupportedBackends`.
 
 ### Manual Testing
 
-[What you tested manually and results]
+- `go build ./pkg/storage/...` → passes.
+- `go test ./pkg/storage/bucket/...` → passes (including the new OCI tests).
+- Regenerated docs and confirmed OCI appears under blocks/ruler/alertmanager storage with the correct flags and defaults.
+- Note: full `go build ./...` and `make lint`/`check-doc` could not run locally (Windows can't compile `pkg/util/resource`, which has no Windows build); these run on CI (Linux).
 
 ---
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Progress
 
-[What you built this week, challenges faced, decisions made]
-
-### Week [Y] Progress
-
-[Continue documenting as you work]
+Implemented in phases, each ending at a buildable/verified checkpoint and one DCO-signed commit: config + flags → client wrapper + vendoring → retry defaults → registration → docs. Biggest surprises handled along the way: (1) vendoring flipped thousands of vendor files to LF due to `core.autocrlf`, but these are phantom diffs that normalize away on `git add` (only the real new SDK files land in the commit); (2) the doc-generator can't compile on Windows (`pkg/util/resource`), so docs were regenerated using a temporary, never-committed Windows build stub — output is byte-identical to CI.
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:**
+  - New: `pkg/storage/bucket/oci/{config.go, bucket_client.go, config_test.go}`
+  - Modified: `pkg/storage/bucket/client.go`, `CHANGELOG.md`, `docs/configuration/v1-guarantees.md`
+  - Generated: `docs/configuration/config-file-reference.md`, `docs/blocks-storage/{querier,store-gateway}.md`, `schemas/cortex-config-schema.json`
+  - Vendored: `github.com/oracle/oci-go-sdk/v65` (+ transitive `gofrs/flock`, `youmark/pkcs8`)
+- **Key commits:** `f2dd592`, `4e41eea`, `d2eb34b`, `4f99295`, `0ba9121` (branch `feature/oci-storage-backend`).
+- **Approach decisions:**
+  - Mirror the `swift` backend (thin wrapper over the objstore provider) rather than reimplementing storage logic.
+  - Build the wrapper config from `oci.DefaultConfig` before overlaying values, so the provider's HTTP transport defaults aren't wiped when the config is marshaled to YAML.
+  - Enable retries by default (`3` attempts / `10s`): the provider does zero retries at `0`/`1`, and every other Cortex backend retries by default.
+  - No OCI-specific check in the top-level `Config.Validate()` (parity with swift/gcs/azure; objstore validates the `raw` provider itself).
+  - Left HTTP-tuning flags out of v1, relying on objstore defaults, to keep the surface small.
 
 ---
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** https://github.com/cortexproject/cortex/pull/7718
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:** Adds OCI Object Storage as a backend for blocks, ruler, and alertmanager, wrapping Thanos objstore's OCI provider (config + flags, registration, tests, regenerated docs/schema, CHANGELOG). Fixes issue #7593. 
 
 **Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
+- Awaiting review — CI workflows are pending maintainer approval to run.
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting review
 
 ---
 
